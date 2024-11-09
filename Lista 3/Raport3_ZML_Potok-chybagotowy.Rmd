@@ -1,0 +1,322 @@
+---
+title: "Raport 3 - Zaawansowane modele liniowe"
+author: "Magdalena Potok"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+
+Celem niniejszego raportu jest zbadanie uogólnionych regresji Poissona, czyli modeli, które radzą sobie ze zjawiskami nadmiernej dyspersji oraz inflacji w zerze. Pierwsza część raportu to symulacje, w której przyjrzymy się zachowaniom poszczególnych parametrów i ich estymatorów w sytuacji, gdy dobrane modele nie przewidują tych zjawisk. W części drugiej raportu najpierw została przeprowdzona analiza danych, a następnie, na podstawie analizy statystycznej, został wybrany model najlepiej opisujący dane.
+
+\newpage
+
+
+
+## Symulacje
+
+
+
+
+```{r, include = FALSE, warning = FALSE, echo = FALSE}
+
+library(MASS)
+library(pscl)
+library(ggplot2)
+library(gridExtra)
+library(kableExtra)
+library(latex2exp)
+
+
+
+
+
+```
+
+Wygenerowana została macierz $\mathbb{X} \in \mathbb{M}_{1000x2}$, taka, że $X_{ij} \sim N(0, \sigma = \frac{1}{\sqrt{1000}})$ i.i.d. Następnie wygenerowany został ciąg predyktorów liniowych $\eta = X\beta$, dla wektora $\beta =(3,3)$ i $10000$ niezależnych replikacji wektora odpowiedzi $y$. Na tej podstawie wyznaczyliśmy statystykę $\chi^2$ oraz $\hat \alpha$. Na poniższych wykresach widzimy rozkłady statytstyki $\chi^2$ oraz $\hat \alpha$ z dopasowaną gęstością teoretyczną (czerwona krzywa). A pod nimi znajdują się ich wykresy kwantylo-kwantylowe.
+
+![]("C:/Users/Madzia/Desktop/ZML/Lista 3/wykres_symulacje_v2.png")
+
+\begin{center}
+Rysunek 1. Histogramy oraz wykresy kwantylo-kwantylowe dla $\hat{\alpha}$ i $\chi^2$.
+\end{center}
+
+Z histogramów możemy odczytać, że empiryczny rozkład obu statystyk jest bardzo zbliżony do teoretycznego - wyjątek stanowi słupek dla wartości bliskich $0$. Koncentracja masy rozkładu w tych okolicach sugeruje występowanie zjawiska nadmiernej dyspersji.  
+Z wykresów kwantylo-kwantylowych możemy zayważyć, że $\hat{\alpha}$ po prawej części wykresu układa się wzdłuż prostej, co oznacza, że dane są biskie rozkładowi normalnemu, jednak lewa strona koncentruje się wokół $0$. Wykres $\chi^2$ sugeruje dobre dopasowanie kwantyli generowanej próby do asymptotycznego rozkładu.
+
+
+\newpage
+
+## Analiza danych
+W drugiej części raportu będziemy zajmować się danymi z pliku "DebTrivedi", które zawierają informacje dotyczące $4406$ osób w wieku wyższym lub równym $66$, które są objęte publicznym pogramem ubezpieczeniowym. Celem jest zmodelowanie zapotrzebowania na opiekę mdeyczną.  
+Będziemy badać związek pomiędzy liczbą wizyt w gabinecie lekarskim (zmienna zalezna "ofp") a zmiennymi niezależnym opisującymi pacjenta:  
+- "hosp" - liczba pobytów w szpitalu,  
+- "health" - zmienna opisująca subiektywne odczucie pacjenta o jego zdrowiu,  
+- "numchron" - liczba przewlekłych stanów chorobowych,  
+- "gender" - płeć,  
+- "school" - liczba lat edukacji,  
+- "privins" - indykator opisujący to, czy pacjent ma dodatkowe prywatne ubezpieczenie zdrowotne.  
+Przejdziemy teraz do wstępnej analizy danych.
+```{r, echo = FALSE, fig.align = "center"}
+dane <- read.csv("C:/Users/Madzia/Desktop/ZML/Lista 3/DebTrivedi.csv")
+dane <- subset(dane, select = c(ofp, hosp, health, numchron, gender, school, privins))
+#var(dane$ofp)
+#mean(dane$ofp)
+par(mfrow = c(1,2))
+hist(dane$ofp, xlab = "Liczba wizyt w gabinecie", main = "Histogram zmiennej ofp", ylab = TeX("Częstotliwość"))
+dane$m_ofp = log(dane$ofp + 0.5)
+hist(dane$m_ofp, xlab = "Wynik funkcji", main = "Histogram zmiennej f(ofp)", ylab = TeX("Częstotliwość"))
+```
+\begin{center}
+Rysunek 2. Histogram liczby wizyt w gabinecie oraz histogram przekształcenia liczby wizyt przez funckję $f$.
+\end{center}
+Na histograme po lewej stronie można dostrzec, że dominującym słupkiem jest ten, dla wartości bliskich zeru $-$ świadczy to o obecności zdarzenia nadmiernej reprezentacji wartości $0$, czyli tkzw. inflacji w zerze. Wartość wariancji badanej zmiennej objaśniającej wynosi `r round(var(dane$ofp),3)`, natomiast średnia wynosi `r round(mean(dane$ofp),3)`. Te wartości są znacząco różne, co oznacza, że zachodzi również zjawisko nadmiernej dyspersji. Aby poradzić sobie z tym problemem wprowadzimy zmienną pomocniczą $f(ofp) = log(ofp+0.5)$. Histogram nowej zmiennej przedstawiony jest po prawej stronie. Tym razem wyliczone wartości wynoszą: wariancja = `r round(var(dane$m_ofp),3)` oraz średnia =`r round(mean(dane$m_ofp),3)` $-$ widać, że te wartości są do siebie zbliżone, a histrogram nie jest skupiony w $0$.
+
+
+Dla każdego regresora osobno zostały narysowane boxploty dla zmiennej objaśniającej $f(ofp)$.
+```{r, echo = FALSE, fig.height = 8.6, fig.cap = "Podpis"}
+
+# zmieniam na polskie xd
+
+dane$gender[dane$gender == "male"] <- "Mężczyzna"
+dane$gender[dane$gender == "female"] <- "Kobieta"
+
+dane$health[dane$health == "average"] <- "Średnie"
+dane$health[dane$health == "excellent"] <- "Doskonałe"
+dane$health[dane$health == "poor"] <- "Słabe"
+
+dane$privins[dane$privins == "no"] <- "Nie"
+dane$privins[dane$privins == "yes"] <- "Tak"
+
+for (i in 1:length(dane$hosp)){
+  if (dane$hosp[i] == 1 || dane$hosp[i] == 2 || dane$hosp[i] == 0){
+    dane$g_hosp[i] = dane$hosp[i]
+  }else{
+    dane$g_hosp[i] = "3 i więcej"
+  }
+}
+
+
+for (i in 1:length(dane$numchron)){
+  if (dane$numchron[i] == 1 || dane$numchron[i] == 2 || dane$numchron[i] == 3 || dane$numchron[i] == 0 || dane$numchron[i] == 3){
+    dane$g_numchron[i] = dane$numchron[i]
+  }else{
+    dane$g_numchron[i] = "4 i więcej"
+  }
+}
+#par(mfrow = c(3,2))
+
+#boxplot(dane$m_ofp~dane$g_hosp, xlab = "Liczba pobytów w szpitalu", ylab = "Liczba wizyt w gabinecie")
+#boxplot(dane$m_ofp~dane$health, xlab = "Subiektywne odczucie pacjenta o jego zdrowiu", ylab = "Liczba wizyt w gabinecie")
+#par(mfrow = c(1,2))
+#boxplot(dane$m_ofp~dane$g_numchron, xlab = "Liczba przewklekłych stanów chorobowych", ylab = "Liczba wizyt w gabinecie")
+
+#boxplot(dane$m_ofp~dane$gender, xlab = "Płeć pacjenta", ylab = "Liczba wizyt w gabinecie")
+
+
+for(i in 1:length(dane$school)){
+  if (dane$school[i] <= 6){
+    dane$g_school[i] ="0-6"
+  } else if(dane$school[i] <= 12){
+    dane$g_school[i] = "7-12"
+  } else{
+    dane$g_school[i] = "13+"
+  }
+}
+#par(mfrow = c(1,2))
+
+p1 <- ggplot(dane, aes(x = factor(g_hosp), y = m_ofp)) + 
+  geom_boxplot() +
+  labs(x = "Liczba pobytów w szpitalu", y = TeX("Wynik funkcji $f(ofp)$")) +
+  theme_minimal()
+
+p2 <- ggplot(dane, aes(x = factor(health), y = m_ofp)) + 
+  geom_boxplot() +
+  labs(x = "Subiektywne odczucie pacjenta o jego zdrowiu", y = TeX("Wynik funkcji $f(ofp)$")) +
+  theme_minimal()
+
+p3 <- ggplot(dane, aes(x = factor(g_numchron), y = m_ofp)) + 
+  geom_boxplot() +
+  labs(x = "Liczba przewlekłych stanów chorobowych", y = TeX("Wynik funkcji $f(ofp)$")) +
+  theme_minimal()
+
+p4 <- ggplot(dane, aes(x = factor(gender), y = m_ofp)) + 
+  geom_boxplot() +
+  labs(x = "Płeć pacjenta", y = TeX("Wynik funkcji $f(ofp)$")) +
+  theme_minimal()
+
+p5 <- ggplot(dane, aes(x = factor(g_school), y = m_ofp)) + 
+  geom_boxplot() +
+  labs(x = "Liczba lat edukacji", y = TeX("Wynik funkcji $f(ofp)$")) +
+  theme_minimal()
+
+p6 <- ggplot(dane, aes(x = factor(privins), y = m_ofp)) + 
+  geom_boxplot() +
+  labs(x = "Dodatkowe ubezpieczenie zdrowotne", y = TeX("Wynik funkcji $f(ofp)$")) +
+  theme_minimal()
+
+# Układanie wykresów w siatce 3x2
+grid.arrange(p1, p2, p3, p4, p5, p6, ncol = 2)
+
+#length(which(dane$numchron == 3))
+
+
+
+```
+
+\begin{center}
+Rysunek 3. Wykresy pudełkowe dla każdego regresora osobno.
+\end{center}
+
+
+Z wykresów pudełkowych możemy wyczytać następujące wnioski:
+\begin{itemize}
+\item Osoby, które nie były nigdy w szpitalu mają najniższą medianę liczby wizyt w gabinecie, jest to grupa osób, która najrzadziej odwiedza gabinet. Możemy zauważyć, że im więcej wizyt w szpitalu, tym mediana jest wyższa.  
+\item Mediana liczby wizyt w gabinecie lekarskim jest najniższa dla grupy osób, które uznały swój stan zdrowia jako doskonały. Największy rozstrzał odpowiedzi jest dla grupy osób, które uznały swój stan zdrowia jako średni. Grupa, która uważa, że słabo się czuje ma najwyższą medianę wizyt w gabinecie.  
+\item Im więcej przewlekłych chorób u pacjenta, tym częstsze wizyty w gabinecie lekarskim. Największy rozstrzał odpowiedzi jest wśród osób, które nie mają żadnej choroby.  
+\item Mediana liczby wizyt lekarskich jest niezmienna ze względu na płeć, jednak u mężczyzn jest większy rozstęp międzykwartylowy.  
+\item Liczba lat edukacji nie ma wpływu na liczbę wizyt, wykresy wyglądają bardzo podobnie.  
+\item Możemy zauważyć, że dodatkowe ubezpieczenie też nie ma znaczącego wpływu, minimalnie wyższa mediana liczby wizyt dla osób, które takowe posiadają.  
+\end{itemize}
+
+Do danych dopasowane zostało 6 modeli, następnie zostały zredukowane o niepotrzebne zmienne. W modelach Poissona oraz w ujemnym dwumianowym nie została usunięta żadna zmienna. Modele ZIPR, ZINBR oraz model Possiona z barierą został zredukowane w parametrach $\gamma$ o intercept oraz zmienną "health". Z kolei model ZINBR w parametrach $\beta$ został zredukowany o zmienne "gender" oraz "privins", a w parametrach $\gamma$ o intercept oraz "health".
+Powyższe zmienne zostały usunięte na podstawie p-wartości w podsumowaniach modeli. Aby sprawdzić poprawność usuniętych zmiennych porównamy wartości kryteriów informacyjnych zredukowanych modeli oraz pełnych.
+
+```{r, echo = FALSE, include = FALSE}
+dane <- read.csv("C:/Users/Madzia/Desktop/ZML/Lista 3/DebTrivedi.csv")
+dane <- subset(dane, select = c(ofp, hosp, health, numchron, gender, school, privins))
+
+ofp <- dane$ofp
+length(dane$ofp[dane$ofp == 0] )
+# ZIPR
+
+m_zipr <- zeroinfl(ofp~., data = dane)
+summary(m_zipr)
+m_zipr2 <- zeroinfl(ofp~. |-1+hosp+numchron+school+gender+privins, data = dane)
+summary(m_zipr2)
+m_zipr3 <- zeroinfl(ofp~. |-1+hosp+numchron+school, data = dane)
+vuong(m_zipr2,m_zipr)
+vuong(m_zipr3,m_zipr)
+vuong(m_zipr2,m_zipr3)
+
+
+## m_zipr2 wygrywa te bitwe.
+
+
+#ZINBR
+
+m_zinbr <- zeroinfl(ofp~., data = dane, dist = "negbin")
+summary(m_zinbr)
+m_zinbr2 <- zeroinfl(ofp~. |-1+hosp+numchron+school+gender+privins, data = dane, dist = "negbin")
+summary(m_zinbr2)
+m_zinbr3 <- zeroinfl(ofp~. |-1+numchron+school, data = dane, dist = "negbin")
+#summary(m_zinbr3)
+vuong(m_zinbr,m_zinbr2)
+vuong(m_zinbr3,m_zinbr)
+vuong(m_zinbr2,m_zinbr3)
+
+## m_zinbr2
+
+m_hurdle <- hurdle(ofp~., data = dane)
+summary(m_hurdle)
+m_hurdle2 <- hurdle(ofp~. |-1+hosp+gender+numchron+school+privins, data = dane)
+m_hurdle3 <- hurdle(ofp~. |-1+hosp+numchron+school, data = dane)
+vuong(m_hurdle,m_hurdle2)
+vuong(m_hurdle,m_hurdle3)
+vuong(m_hurdle2,m_hurdle3)
+
+## m_hurdle2
+
+m_hurdle_nb <- hurdle(ofp~., data = dane, dist = "negbin")
+summary(m_hurdle_nb)
+m_hurdle_nb2 <- hurdle(ofp~hosp+numchron+health+school|-1+hosp+numchron+gender+school+privins, data=dane, dist = "negbin")
+m_hurdle_nb3 <- hurdle(ofp~hosp+numchron+health+school |-1+hosp+numchron+school, data = dane, dist = "negbin")
+vuong(m_hurdle_nb,m_hurdle_nb2)
+vuong(m_hurdle_nb2,m_hurdle_nb3)
+vuong(m_hurdle_nb,m_hurdle_nb3)
+
+
+
+df <- data.frame(
+  AIC_1 = c(AIC(m_zipr), AIC(m_zinbr), AIC(m_hurdle), AIC(m_hurdle_nb) ),
+  AIC_zred = c(AIC(m_zipr2), AIC(m_zinbr2), AIC(m_hurdle2), AIC(m_hurdle_nb2) ),
+  BIC_1 = c(BIC(m_zipr), BIC(m_zinbr), BIC(m_hurdle), BIC(m_hurdle_nb) ),
+  BIC_zred = c(BIC(m_zipr2), BIC(m_zinbr2), BIC(m_hurdle2), BIC(m_hurdle_nb2) )
+  
+)
+tdf <- t(df)
+colnames(tdf) <- c("ZIPR", "ZINBR", "Poisson \\ z barierą", "ujemny dwumianowy \\ z barierą")
+rownames(tdf)  <- c("AIC pełny", "AIC zred.", "BIC pełny", "BIC zred.")
+
+
+
+```
+
+\begin{center}
+Tabela 1. Wartości kryteriów informacyjnych dla modeli pełnych i zredukowanych.
+\end{center}
+
+```{r, echo = FALSE}
+kable(tdf, format = "latex", booktabs = TRUE, escape = FALSE) %>%
+  kable_styling(latex_options = c("striped", "hold_position")) %>%
+  column_spec(3, width = "3cm") %>%
+  column_spec(4, width = "3.5cm")
+
+
+```
+
+Z tabeli możemy odczytać, że wartości kryterium $BIC$ są niższe zawsze dla zredukowanego modelu. W przypadku kryterium $AIC$ wszystkie modele zredukowane oprócz modelu ujemnego dwumianowego z barierą mają niższe wartości. Jednak w tym przypadku ta różnica jest niewielka, więc do dalszej analizy wybierzemy model zredukowany.
+\newline
+
+Analiza tabeli 2. (następna strona) wskazuje na optymalne dopasowanie do danych przez zredukowany model ujemny dwumianowy z barierą. Kryteria $AIC$ i $BIC$ przyjmują najniższe wartości dla tego modelu, co potwierdza jego adekwatność -- model ZINBR przyjmuje bardzo zbliżone wartości, co wskazuje na również dobre dopasowanie do danych. Te wnioski zgadzają się ze wstępnymi obserwacjami, które sugerowały obecność nadmiernej dyspersji oraz inflacji w zerze na podstawie histogramu liczby wizyt w gabinecie lekarskim na rysunku 2. Również dla modelu ZINBR oraz modelu ujemniego dwumianowego z barierą logarytm funkcji wiarogodności ma najniższą wartość, co wskazuje na lepsze dopasowanie do danych. Jeżeli chodzi o oczekiwaną liczbę zer, to w danych zmienna $ofp$ przyjmuje $683$ zera, dokładnie taka wartość wyszła dla modelu ujemnego dwumianowego z barierą oraz modelu Poissona z barierą.  
+Z drugiej strony, model Poissona wykazuje najgorsze dopasowanie według analizy tabeli. Wartości kryteriów $AIC$ i $BIC$ dla tego modelu są najwyższe i niekorzystne. Ten wynik nie zaskakuje, biorąc pod uwagę obserwacje dotyczące nadmiernej dyspersji i inflacji w zerze. Stąd wniosek, że model Poissona prawdopodobnie nie jest wystarczający do opisania tych danych.
+
+\newpage
+
+\begin{center}
+Tabela 2. Wyliczone wartości dla każdego wyżej wybranego modelu.
+\end{center}
+
+```{r, echo = FALSE}
+#sum(dpois(0, predict.glm(m_glm, type = "response"))) GLM GIT
+#sum(dnbinom(0, size = m_glm_nb$theta, mu = predict(model2, type="response"))) GLMNB GIT
+#sum(predict(m_zipr2, type = "zero")+(1-predict(m_zipr2, type = "zero"))*exp(-predict(m_zipr2, type = "response"))) ZIPR GIT
+#sum(predict(m_zinbr2, type = "zero")+(1-predict(m_zinbr2, type = "zero"))*dnbinom(0, size = m_zinbr2$theta, mu = predict(m_zinbr2, type = "response")))
+#BIC(m_hurdle_nb2)
+#colSums(predict(m_hurdle_nb2,type = "prob"))[1]
+
+#colSums(predict(m_hurdle2,type = "prob"))[1]
+#summary(m_glm)
+tdf <- data.frame(
+  glm = c(1.03, 0.16, -0.36, 0.25, 0.15, -0.11, 0.03, 0.20, "-", "-", "-", "-", "-", "-", "-", "-", "-", 8, -17971.61, 35959, 36010.35, 46.71),
+  
+  glmnb = c(0.93, 0.22, -0.34, 0.31, 0.17, -0.13, 0.03, 0.22, "-", "-", "-", "-", "-", "-", "-", "-", 1.21, 8, -12170.55, 24359, 24416.62, 608.01),
+  
+  ZIPR = c(1.41, 0.16, -0.31, 0.25, 0.10, -0.06, 0.02, 0.08, "-", -0.31, "-", "-", -0.54, 0.42, -0.06, -0.75, "-", 13,  -16140, 32298.49, 32387.96, 710.2),
+  
+  ZINBR = c(1.2, 0.20, -0.32, 0.29, 0.13, -0.08, 0.02, 0.12, "-", "-", "-", "-", -1.25, 0.56, -0.08, -1.24, 1.49, 12, -12090, 24216.51, 24305.98, 749.14),
+  
+  Poissonbariera = c(1.41, 0.16, -0.30, 0.25, 0.10, -0.06, 0.02, 0.08, "-", 0.32, "-", "-", 0.55, -0.42, 0.06, 0.75, "-", 13, -16140, 32300.88, 32390.35, 683),
+  
+  ujemnybariera = c(1.22, 0.21, -0.34, 0.31, 0.13, "-", 0.02, "-", "-", 0.32, "-", "-", 0.55, -0.42, 0.06, 0.75, 1.39, 11, -12090, 24215.57, 24298.65, 683)
+)
+colnames(tdf) <- c("Poisson", "Ujemny dwumianowy", "ZIPR", "ZINBR", "Poisson \\ z barierą", "Ujemny dwumianowy \\ z barierą")
+# Dodanie nazw wierszy
+rownames(tdf) <- c("intercept", "hosp", "healthexcellent", "healthpoor", "numchron", "gendermale", "school", "privinsyes",
+                   "intercept'", "hosp'", "healthexcellent'", "healthpoor'",
+                   "numchron'", "gendermale'", "school'", "privinsyes'",
+                   "theta", "liczba parametrów", "logarytm funkcji wiarogodności", "AIC", "BIC", "oczekiwana liczba zer")
+
+# Tworzenie tabelki
+kable(tdf, format = "latex", booktabs = TRUE, longtable = TRUE, escape = FALSE, align = "c", col.names = c("\\shortstack{Poisson}", "\\shortstack{Ujemny \\\\ dwumianowy}", "ZIPR", "ZINBR", "\\shortstack{Poisson \\\\ z barierą}", "\\shortstack{Ujemny dwumianowy \\\\ z barierą}")) %>%
+  kable_styling(latex_options = c("striped", "hold_position")) %>%
+  pack_rows("Parametry beta", 1, 8) %>%
+  pack_rows("Parametry gamma", 9, 16)
+```
+## Podsumowanie
+\begin{itemize}
+\item Z histogramów parametrów z części symulacyjnej można było odczytać zjawisko inflacji w zerze - największy słupek był dla wartości bliskich 0.
+\item Wykres kwantylo-kwantylowy $\hat{\alpha}$ sugerował, że istnieje wiele replikacji, w których $\hat{\alpha}$ ma wartości bliskie $0$, a dla pozostałych danych empiryczne kwantyle dobrze pasują do teoretycznych.
+\item W przypadku wykresy kwantylo-kwantylowego $\chi^2$ punkty lezą blisko lini prostej, co oznacza, że empiryczny rozkład dobrze pasuje do teoretycznego.
+\item Analiza wstępna pobranych danych wykazała występowanie zjawisk nadmiernej dyspersji oraz inflacji w zerze.
+\item Najlepszym dopasowaniem do danych okazał się zredukowany o niepotrzebne zmiene model ujemny dwumianowy z barierą, a niewiele gorszy od niego okazał się model ZINBR. Najgorzej dopasowanym do danych okazał się model Poissona.
+\end{itemize}

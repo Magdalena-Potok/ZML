@@ -1,0 +1,339 @@
+---
+title: "Raport 2 — Zaawansowane modele liniowe"
+author: "Magdalena Potok"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r, include=FALSE}
+
+library(ggplot2)
+library(knitr)
+library(gridExtra)
+library(tidyr)
+library(dplyr)
+
+```
+Celem raportu jest przeanalizowanie danych na podstawie regresji Poissona. 
+
+
+## Zadanie 1  
+Plik **sklep** zawiera dane o liczbie klientów przychodzących do pewnego sklepu w okresie około $3$-ech miesięcy, w zbiorze znajdują się kolumny: "*no.klients*" $-$ liczba klientów obsłużonych w danej godzinie, "*day*" $-$ dzień tygodnia, "*hour*" $-$ godzina oraz "*events*" $-$ informacja, czy w danym dniu miało miejsce jakieś wydarzenie sportowe, gdzie $0$ oznacza, że nie, a $1$, że tak.  
+W tym raporcie zostaną przeanalizowane te dane za pomocą regresji Poisssona traktując liczbę obsłużonych klientów jako zmienną objaśniającą, a pozostałe zmienne jako potencjalne predyktory. 
+
+## Zadanie 2
+Sporządzimy wykresy boxplot dla zmiennej $y$ w zależności od każdego predyktora osobno. 
+
+```{r setup, echo = FALSE, warning = FALSE, fig.height = 3}
+dane <- read.csv("C:/Users/Madzia/Desktop/ZML/Lista 2/sklep")
+dane <- dane[,-1] #usuwa pierwsza kolumne liczaca wiersze
+dane$day = factor(dane$day, levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"),
+                  ordered = TRUE) #faktor dni tygodnia uporzadkowany
+dane$events <- factor(dane$events)
+dane$hour <- factor(dane$hour)
+
+#summary(dane)
+
+#zad2 boxplot
+p1 <- ggplot(dane, aes(x = day, y = no.klients, fill = day))+
+  geom_boxplot() +
+  labs(x = "Dni tygodnia", y = "Liczba klientów") +
+  guides(fill = FALSE)+
+  theme_minimal() + 
+  scale_x_discrete(labels = c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"))
+
+
+p2 <- ggplot(dane, aes(x = events, y = no.klients, fill = events)) +
+        geom_boxplot() +
+        guides(fill = FALSE) +
+        labs(x = "Czy było wydarzenie", y = "Liczba klientów") +
+        theme_minimal() +
+       scale_x_discrete(labels = c("Nie", "Tak"))
+
+
+p3 <- ggplot(dane, aes(x = hour, y = no.klients, fill = hour)) +
+  geom_boxplot() + 
+  guides(fill = FALSE) +
+  labs(x = "godzina" , y = "l. klientow") +
+  theme_minimal()
+
+grid.arrange(p1,p2, ncol = 2)
+```
+
+\begin{center}
+Rysunek 1.: Boxploty zmiennej $y$ w zależności od dni tygodnia oraz "events".
+\end{center}
+```{r, echo = FALSE, fig.height = 3}
+p3
+
+```
+
+\begin{center}
+Rysunek 2: Boxplot zmiennej $y$ w zależności od godzin.
+\end{center}
+
+Z pierwszego wykresu łatwo odczytać, że w tygodniu panuje przeważnie większy ruch, niż w weekendy, świadczy o tym rozstawienie pudełek na wykresie typu boxplot. Z wykresu, gdzie predyktorem jest wydarzenie, możemy odczytac, że ten parametr nie ma istotnego wpływu na liczbę klientów w sklepie. Ostatni wykres, czyli ilość klientów w zależności od godziny, informuje nas, że największy ruch jest w godzinach 16-19, a najmniejszy w godzinach 12-15.   
+\newline
+Sporządzimy teraz wykresy qqplot.
+
+```{r, echo=FALSE, warning = FALSE}
+p4 <- qplot(hour, no.klients, shape = events, col = day, data = dane) + theme_minimal() + labs(y = "Liczba klientow", x = "godzina")+ 
+  scale_x_discrete(breaks = c(8,12,16,20,23))
+
+p5 <- qplot(hour, no.klients, facets = events ~ day, data = dane)+ 
+  scale_x_discrete(breaks = c(8,12,16,20,23))+ 
+  labs(y = "Liczba klientow", x = "godzina")+ 
+  theme_minimal()
+
+p6 <- qplot(hour, no.klients, color = day, data = dane)+
+  labs(y = "Liczba klientow", x = "godzina")+ 
+  theme_minimal()+ 
+  scale_x_discrete(breaks = c(8,12,16,20,23))
+
+p7 <- qplot(hour, no.klients, facets = ~day, data = dane)+ 
+  scale_x_discrete(breaks = c(8,12,16,20,23))+ 
+  labs(y = "Liczba klientow", x = "godzina")+ 
+  theme_minimal()
+```
+
+```{r, echo = FALSE, fig.height = 3}
+grid.arrange(p4,p6, ncol = 2)
+```
+\begin{center}
+Rysunek 3: Wykresy qplot zależności liczby klientów od godziny i dnia tygodnia z rozbiciem na zmienną "events" oraz bez.
+\end{center}
+
+Z wykresu po lewej stronie możemy zauważyć, że zmienna "events" nie wpływa na liczbę klientów, ilość punktów zaznaczonych trójkątami nie układa się w żaden specjalny, różniący się od okrągłego znaku, sposób. Wykres po prawej stronie, który nie uwzględnia rozróznienia zmiennej events, jest dużo bardziej przejrzysty i z niego możemy odczytać liczbę klientów w danych dniach i o ustalonych godzinach.
+
+
+```{r, echo = FALSE, fig.height = 4, fig.cap = ""}
+grid.arrange(p5,p7, ncol =1)
+```
+\begin{center}
+Rysunek 4: Wykresy qplot zależności liczby klientów od godziny i dnia tygodnia z rozbiciem na podgrupy ze względu na zmienne objaśniające.
+\end{center}
+
+Tutaj ponownie z pierwszego wykresu dostrzegamy brak wpływu zmiennej "events". Z obu wykresów możemy dostrzec, że liczba klientów w ciągu tygodnia ma 4 charakterystyczne grupy godzin. W weekend natomiast kształtuje się rozkład jednostajny.
+
+## Zadanie 3
+
+```{r, echo = FALSE, include = FALSE}
+m1 <- glm(no.klients ~ hour*day*events, dane, family = "poisson")
+nrow(summary(m1)$coefficients) # 16*7*2 = 224 zmienne
+m2 <- glm(no.klients ~ hour*day, dane, family = "poisson")
+nrow(summary(m2)$coefficients) #16*7 = 112 bez event, 224-112=112
+#anova(m2, m1, test = "Chisq") # pwartosc = 0.3755 > 0.05, czyli nie mozemy odrzucic H_0, że events nie maja wplywu
+p_wart <- round(1- pchisq(m2$deviance - m1$deviance, 112),4) #0.3755 > 0.05, czyli nei odrzucamy H_0
+
+#model bez interakcji
+m3 <- glm(no.klients ~ hour + day + events, dane, family = "poisson")
+nrow(summary(m3)$coefficients) #15+6+2 = 23
+anova(m3, m1, test = "Chisq")[2, 5]
+
+```
+Model Poissona z interakcją pomiędzy wszystykimi regresorami posiada $224$ zmiennych. Model z interakcją bez regresora wydarzenie sportowe posiada $112$ zmiennych, co oznacza, że $224-112=112$ zmiennych w modelu z interakcją zależy od regresora wydarzenie sportowe. Aby zbadać, czy zmienna wydarzenie sportowe jest istotna posłużyliśmy się komendą anova i przeprowadzony został test statystyczny $chi$-kwadrat porównując model zawierający wszystkie interakcje z modelem bez regresora wydarzenie sportowe. $P$-wartość tego testu wyszła $0.3755 > 0.05$, oznacza to, że nie możemy odrzucić hipotezy, że ten regresor jest nieistotny. Do zbadania, czy interakcje są istotne zbudowany został model bez interakcji i również przeprowadzony został test anova. Wynik tym razem wyszedł bardzo mały, mniejszy niz $0.05$, oznacza to, że interakcje są istotne.
+
+## Zadanie 4
+
+```{r, echo = FALSE, include = FALSE}
+dane <- read.csv("C:/Users/Madzia/Desktop/ZML/Lista 2/sklep") #usuwa pierwsza kolumne liczaca wiersze
+
+#dane_typdnia <- c()
+#for (i in 1:nrow(dane)) {
+#  if (dane[i,]$day %in% c("Saturday", "Sunday")) {
+#    dane_typdnia <- c(dane_typdnia,"Dzień weekendowy")
+#  } else {
+#    dane_typdnia <- c(dane_typdnia,"Dzień roboczy")
+#  }
+#}
+
+dane$dane_typdnia<-case_when(dane$day == 'Sunday' ~ "Dzień weekendowy",
+                         dane$day == 'Saturday' ~ "Dzień weekendowy",
+                         dane$day == 'Monday' ~ "Dzień roboczy",
+                         dane$day == 'Tuesday' ~ "Dzień roboczy",
+                         dane$day == 'Wednesday' ~ "Dzień roboczy",
+                         dane$day == 'Thursday' ~ "Dzień roboczy",
+                         dane$day == 'Friday' ~ "Dzień roboczy")
+
+
+dane$grupy<-case_when(dane$hour>7 & dane$hour<12 ~ "8-11.59",
+                       dane$hour>11 & dane$hour<16 ~ "12-15.59",
+                       dane$hour>15 & dane$hour<20 ~ "16-19.59",
+                       dane$hour>19 & dane$hour<24 ~ "20-23.59"
+                       )
+
+
+
+dane$grupy<-as.factor(dane$grupy)
+dane$dane_typdnia<-as.factor(dane$dane_typdnia)
+
+
+
+
+m4 <- glm(no.klients~dane_typdnia*grupy, dane, family = 'poisson')
+(summary(m4)$coefficients)
+
+nrow(summary(m4)$coefficients) # 8 zmiennch
+anova(m4, m1, test = "Chisq")[2, 5] # nie rozni sie statystycznie
+m4
+dane2 <- dane
+colnames(dane2)[6] <- "Dzień"
+colnames(dane2)[7] <- "Blok"
+
+
+```
+
+Nowy model ma $8$ zmiennych. Najbogatszym modelem  z poprzedniego zadania jest model, który posiada interakcję między wszystkimi regresorami. Ponownie do przeprowadzenia tego testu posłużyliśmy się komendą anova, $p$-wartość tego testu wynosi w przybliżeniu $0.869$, co oznacza, że nie możemy odrzucić hipotezy zerowej, takiej, że nowy model nie różni się statystycznie od poprzedniego. Wychodzi na to, że model, który ma $8$ zmiennych jest tak samo wydajny, jak model, który ma $224$ zmienne.
+\newpage
+
+## Zadanie 5
+
+\begin{center}
+Tabela 1: Podgrupy modelu grupującego na godziny i typ dnia.
+\end{center}
+
+```{r, echo = FALSE}
+
+podgrupy <- c("Dzień roboczy 8:00-11:59", 
+              "Dzień roboczy 12:00-15:59", 
+               "Dzień roboczy 16:00-19:59", 
+              "Dzień roboczy 20:00-23:59",
+              "Dzień weekendowy 8:00-11:59", 
+               "Dzień weekendowy 12:00-15:59", 
+              "Dzień weekendowy 16:00-19:59",
+              "Dzień weekendowy 20:00-23:59")
+
+srednie <- round(c(mean(dane2[dane2$Dzień == "Dzień roboczy" & dane2$Blok == "8-11.59", 5] ),
+             mean(dane2[dane2$Dzień == "Dzień roboczy" & dane2$Blok == "12-15.59", 5] ),
+             mean(dane2[dane2$Dzień == "Dzień roboczy" & dane2$Blok == "16-19.59", 5] ),
+             mean(dane2[dane2$Dzień == "Dzień roboczy" & dane2$Blok == "20-23.59", 5] ),
+             mean(dane2[dane2$Dzień == "Dzień weekendowy" & dane2$Blok == "8-11.59", 5] ),
+             mean(dane2[dane2$Dzień == "Dzień weekendowy" & dane2$Blok == "12-15.59", 5] ),
+             mean(dane2[dane2$Dzień == "Dzień weekendowy" & dane2$Blok == "16-19.59", 5] ),
+             mean(dane2[dane2$Dzień == "Dzień weekendowy" & dane2$Blok == "20-23.59", 5] )
+             ),2)
+
+postac <- c(
+paste0("$\\beta_0 + \\beta_4$"), 
+paste0("$\\beta_0$"),
+paste0("$\\beta_0 + \\beta_2$"),
+paste0("$\\beta_0 + \\beta_3$"),
+paste0("$\\beta_0 + \\beta_1 + \\beta_4 + \\beta_7$"),
+paste0("$\\beta_0 + \\beta_1$"),
+paste0("$\\beta_0 + \\beta_1 + \\beta_2 + \\beta_5$"),
+paste0("$\\beta_0 + \\beta_1 + \\beta_3 + \\beta_6$"))
+
+#intercept dzien zwykly 12-16
+
+
+
+war <- round(c(
+  sum(summary(m4)$coefficients[c(1,5),1]),
+  sum(summary(m4)$coefficients[c(1),1]),
+  sum(summary(m4)$coefficients[c(1,3),1]),
+  sum(summary(m4)$coefficients[c(1,4),1]),
+  sum(summary(m4)$coefficients[c(1,2,5,8),1]),
+  sum(summary(m4)$coefficients[c(1,2),1]),
+  sum(summary(m4)$coefficients[c(1,2,3,6),1]),
+  sum(summary(m4)$coefficients[c(1,2,4,7),1])
+),3)
+
+df <- data.frame(
+  Podgrupy = podgrupy,
+  Srednie = srednie,
+  Postac_predyktora = postac,
+  Wartosc_predyktora = war
+)
+
+# Usunięcie nazw wierszy
+colnames(df) <- NULL
+
+
+# Transpozycja ramki danych, aby informacje były przedstawione jako wiersze
+df_transponed <- t(df)
+
+rownames(df_transponed) <- c("Grupy", "Średnie", "Postać predyktora", "Wartość predyktora")
+
+# Utworzenie tabelki w formacie markdown
+kable(df_transponed, format = "markdown")
+
+#\beta_0 esty
+```
+Z tabeli możemy odczytać, że w weekend klienci przychodzą z tą samą częstotliwością niezależnie od godziny. W następnym zadaniu sprawdzimy, czy predyktory liniowe odpowiadające podgrupom godzin weekendowych są takie same $-$ do tego posłużymy się testem Walda.
+
+## Zadanie 6
+
+Korzystając z postaci prekdytora dla dni weekendowych możemy wyznaczyć $\eta_5 = \beta_0 + \beta_1 + \beta_4 + \beta_7, \ \eta_6 = \beta_0 + \beta_1, \ \eta_7 = \beta_0 + \beta_1 + \beta_2 + \beta_5$ oraz $\eta_8 = \beta_0 + \beta_1 + \beta_3 + \beta_6$. Będziemy badać hipotezę następującej postaci:
+$$H_0: \eta_5 = \eta_6 = \eta_7 = \eta_8 \quad vs \quad H_1: \exists{i \neq j}: \eta_i \neq \eta_j.$$
+
+```{r, echo = FALSE, include = FALSE}
+
+m4
+
+A <- matrix(c(0,0,0,1,0,0,1,0,
+              0,0,1,0,0,1,0,0,
+              0,0,0,0,1,0,0,1), nrow = 3, byrow = TRUE)
+
+#potzebujemy J^{-1}, J = X'S(bet)X
+X <- model.matrix(m4)
+#X <- matrix(0, ncol = 8, nrow = nrow(dane2))
+#dane2$Dzień == "Dzień weekendowy"
+#dane2$hour  <- as.numeric(dane2$hour)
+#dane2[1]$hour >= 8
+#dane2$Blok
+#summary(dane2)
+#X[1,5]
+#dane2[1,]$Blok 
+
+
+#1.38 <-powinno tyle wyjsc Wald
+
+n = length(dane$X)
+S = diag(n)
+mu = predict(m4, type="response")
+S = S * mu
+
+Fisher <- t(X)%*%S%*%X
+odwr_F <- solve(Fisher)
+
+estym <- summary(m4)$coefficients[,1]
+Wald <- t(A%*%estym) %*% solve(A %*% odwr_F %*% t(A)) %*% (A %*% estym)
+Wald
+
+qchisq(1-0.05,3)
+```
+Do przetestowania tych hipotez posłużymy się statystyką Walda. Statystyka testowa wynosi $1.38$, przy prawdziwości $H_0$ zbiega ona do rozkładu $\chi^2$ z $3$ stopniami swobody. Odrzucamy hipotezę zerową, jeśli dla $\alpha = 0.05$ $W > F^{-1}(1-\alpha,3) = 7.81,$ a więc nie ma podstaw do odrzucenia hipotezy zerowej. 
+
+## Zadanie 7
+
+
+\begin{center}
+Tabela 2: Grafik pracy sklepu.
+\end{center}
+
+
+```{r, echo = FALSE}
+df <- data.frame(
+  P1 <- c(paste(" "," 8-12"), paste(" "," 8-12"), paste(" ","8-12"), paste(" ","8-12"), paste(" ","8-12"), paste(" ","8-16"), paste(" ","8-16")), #36
+  P2 <- c(paste(" ","8-16"), paste(" ","8-16"), paste(" ","8-16"), paste(" ","8-16"), paste(" ","8-16"), paste("  ","-"), paste("  ","-")),
+  P3 <- c("16-24", "16-24", "16-24", "16-24", "16-24", paste("  ","-"), paste("  ","-")),
+  P4 <- c("16-24", "16-24", "16-24", "16-24", "16-24", paste("  ","-"),paste("  ","-")),
+  P5 <- c("16-20", "16-20", "16-20", "16-20", "16-20", "16-24", "16-24")
+  
+)
+t_df <- t(df)
+colnames(t_df) <- c("Poniedziałek", "Wtorek", "Środa","Czwartek", "Piątek", "Sobota", "Niedziela")
+rownames(t_df) <- c("Pracownik 1", "Pracownik 2", "Pracownik 3", "Pracownik 4", "Pracownik 5")
+knitr::kable(t_df, format = "markdown")
+```
+
+Pracownicy $2, 3$ i $4$ pracują po $40$ godzin tygodniowo, natomiast pracownicy $1$ i $5$ po $36$ godzin.
+
+## Wnioski
+* Predyktor "events" nie ma istotnego wpływu na ilość klientów.
+* Typ dnia oraz godziny mają wpływ na zmienną objaśniającą, czyli ilość klientów.
+* W weekend klienci przychodzą z tą samą częstotliwością o różnych porach.
+* Uproszczony model tak samo dobrze przewiduje dane, a posiada znacznie mniej zmiennych
+
+
+

@@ -1,0 +1,426 @@
+---
+title: "Raport 1"
+author: "Magdalena Potok"
+date: '`r Sys.Date()`'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+Dane = read.csv("C:/Users/Madzia/Desktop/ZML/Lista 1/lista_1.csv")
+Dane = Dane[,-1]
+Dane$success = factor(Dane$success)
+
+library(ggplot2)
+library(gridExtra)
+library(knitr)
+library("pROC")
+set.seed(1)
+```
+
+Celem raportu jest badanie relacji między p-stwami przyjęcia na studia, wynikami z testów rachunkowych oraz poziomem niepewności, z wykorzystaniem analizy danych oraz symulacji, w celu zrozumienia wpływu różnych czynników na modele regresji logistycznej oraz oceny ich efektywności.
+
+## Zadanie 1,2 i 3
+
+Zbiór danych **"Lista_1.csv"** opisuje relacje między p-stwami przyjęcia na studia (success), a wynikami z testów rachunkowych (numeracy) i poziomu niepewności (anxiety). Poniżej zanjdują się boxploty dla zmiennej "numeracy" oraz "anxiety" w rozbiciu na grupę przyjętych/nieprzyjętych osób.
+
+```{r, warning = FALSE, echo = FALSE, fig.height = 3.5}
+b1 <- ggplot(Dane, aes(x = success, y = numeracy, fill = success)) +
+  geom_boxplot() +
+  labs(x = "Przyjęcie na studia", y = "Wynik z testu rachunkowego") +
+  scale_fill_manual(values = c("Przyjęci" = "chartreuse1", "Nieprzyjęci" = "firebrick1")) +
+  theme_minimal()
+
+b2 <- ggplot(Dane, aes(x = success, y = anxiety, fill = success)) +
+  geom_boxplot() +
+  labs(x = "Przyjęcie na studia", y = "Poziom niepewności") +
+  scale_fill_manual(values = c("Przyjęci" = "chartreuse1", "Nieprzyjęci" = "firebrick1")) +
+  theme_minimal()
+
+grid.arrange(b1, b2, ncol = 2, top = "Boxploty dla numeracy/anxiety w zależności od grupy przyjętych/nieprzyjętych osób")
+```
+Wykresy przedstawiają rozkład zmiennych numeracy oraz poziomu niepewności (anxiety) w zależności od grupy przyjętych/nieprzyjętych osób. Z analizy boxplotów wynika, że obie zmienne - numeracy i anxiety - wydają się mieć istotny wpływ na sukces kandydatów.  
+Pierwszy wykres pokazuje, że osoby przyjęte na studia tendencjonalnie uzyskiwały wyższe wyniki z testów rachunkowych (numeracy) w porównaniu do tych, które nie zostały przyjęte. Możemy wnioskować, że wyniki z testów rachunkowych mogą odgrywać istotną rolę w procesie rekrutacji, przy czym osoby z wyższymi wynikami mają większe szanse na przyjęcie na studia.  
+Drugi wykres ukazuje, że osoby, które nie zostały przyjęte na studia, zazwyczaj wykazywały wyższy poziom niepewności (anxiety) w porównaniu do osób przyjętych. To sugeruje, że poziom niepewności może negatywnie wpływać na szanse przyjęcia na studia, przy czym osoby o niższym poziomie niepewności mogą mieć większe szanse na sukces.
+
+
+## Zadanie 4 i 5
+
+Skonstruuję model regresji logistycznej dla powyższych danych używając różnych funkcji linkujących (logit, probit, cauchit, cloglog). Podam dla każdej z funkcji estymatory parametrów i wyniki testów istotności, wyznaczę przewidywane p-stwo sukcesu u studenta, którego anxiety = 13, numeracy = 10. Narysuję krzywą ROC dla dopasowanych modelów statystycznych.
+
+```{r, echo = FALSE, warning = FALSE}
+modellog <- glm(success ~ numeracy + anxiety, data = Dane, family = "binomial")
+modellog2 <- glm(success ~ numeracy + anxiety, data = Dane, family = binomial(link="probit"))
+modellog3 <- glm(success ~ numeracy + anxiety, data = Dane, family = binomial(link="cauchit"))
+modellog4 <- glm(success ~ numeracy + anxiety, data = Dane, family = binomial(link="cloglog"))
+
+# Nowe Dane do przewidywania
+x_new <- data.frame(numeracy = 10, anxiety = 13)
+
+# Przewidywanie prawdopodobieństwa sukcesu dla każdego modelu
+prob <- predict.glm(modellog, newdata = x_new, type="response")
+prob2 <- predict.glm(modellog2, newdata = x_new, type="response")
+prob3 <- predict.glm(modellog3, newdata = x_new, type="response")
+prob4 <- predict.glm(modellog4, newdata = x_new, type="response")
+
+# AIC
+AIC1 <- AIC(modellog)
+AIC2 <- AIC(modellog2)
+AIC3 <- AIC(modellog3)
+AIC4 <- AIC(modellog4)
+
+# Tworzenie data frame
+wyniki <- data.frame(
+  Model = c("Logit", "Probit", "Cauchit", "Cloglog"),
+  E_Intercept = round(c(modellog$coefficients[1], modellog2$coefficients[1], modellog3$coefficients[1], modellog4$coefficients[1]),3),
+  E_Numeracy = round(c(modellog$coefficients[2], modellog2$coefficients[2], modellog3$coefficients[2], modellog4$coefficients[2]),3),
+  E_Anxiety = round(c(modellog$coefficients[3], modellog2$coefficients[3], modellog3$coefficients[3], modellog4$coefficients[3]),3),
+  p_Intercept = round(c(summary(modellog)$coefficients[10], summary(modellog2)$coefficients[10], summary(modellog3)$coefficients[10], summary(modellog4)$coefficients[10]),3),
+  p_Numeracy = round(c(summary(modellog)$coefficients[11], summary(modellog2)$coefficients[11], summary(modellog3)$coefficients[11], summary(modellog4)$coefficients[11]),3),
+  p_Anxiety = round(c(summary(modellog)$coefficients[12], summary(modellog2)$coefficients[12], summary(modellog3)$coefficients[12], summary(modellog4)$coefficients[12]),3),
+  prawdop = round(c(prob, prob2, prob3, prob4),3),
+  AIC = round(c(AIC1, AIC2, AIC3, AIC4),3)
+)
+knitr::kable(wyniki)
+
+```
+W tabelce kolumny zaczynające się "E_" oznaczają estymatory współczynników konkretnych parametrów, natomiast "p_" to p-wartości, które mówią o ich istotności. W przypadku funkcji logit oraz probit wszystkie zmienne są istotne, co potwierdzają (przy założonym poziomie istotności $\alpha = 0.05$) wartości p-value dla współczynników w modelach. Natomiast w przypadku funkcji cloglog tylko dla interceptu nie odrzucamy hipotezy zerowej $H_0 : \beta_0 = 0$. Te wyniki są zgodne z obserwacjami płynącymi z analizy boxplotów.
+Funkcja cauchit nie wskazuje na istotność żadnego z parametrów, co sugeruje, że jej skuteczność może być ograniczona w tym konkretnym przypadku.
+Prawdopodobieństwo sukcesu dla studenta z numeracy=10 i anxiety=13 jest równe około 0.88, co jest stosunkowo wysoką wartością, sugerującą dość wysokie szanse na sukces w kontekście tych wartości predykcyjnych.
+Według kryterium AIC, model z funkcją cauchit jest najlepiej dopasowany. Jednakże, należy podkreślić, że wartość AIC jest tylko jednym z kryteriów oceny modeli, a istotność parametrów również stanowi istotny czynnik w ocenie jakości modeli. Wartość AIC w modelach logitowych jest zbliżona, z czego wynika, że model logitowy jest drugim najlepszym modelem pod względem dopasowania.
+
+```{r, echo = FALSE}
+
+par(mfrow=c(2,2))
+suppressMessages({
+coef = modellog$coefficients
+mod = coef[1] + coef[2]*Dane$numeracy + coef[3]*Dane$anxiety
+plot(roc(Dane$success,mod), print.auc=TRUE, main="Logit")
+
+coef2 = modellog2$coefficients
+mod2 = coef2[1] + coef2[2]*Dane$numeracy + coef2[3]*Dane$anxiety
+plot(roc(Dane$success,mod2), print.auc=TRUE, main="Probit")
+
+coef3 = modellog3$coefficients
+mod3 = coef3[1] + coef3[2]*Dane$numeracy + coef[3]*Dane$anxiety
+plot(roc(Dane$success,mod3), print.auc=TRUE, main="Cauchit")
+
+coef4 = modellog4$coefficients
+mod4 = coef4[1] + coef4[2]*Dane$numeracy + coef4[3]*Dane$anxiety
+plot(roc(Dane$success,mod4), print.auc=TRUE, main="Cloglog")
+})
+```
+Przy ocenie jakości klasyfikatora pomocny jest wykres ROC (Receiver Operating Characteristic), który ilustruje zależność między czułością (sensitivity) a specyficznością (specificity) predyktora w zależności od wartości parametru s.
+Czym większa powierzchnia pod krzywą ROC, tym lepsza jakość klasyfikacji. Dla analizowanych funkcji linkujących osiągamy podobne dopasowanie modelu do danych. Najgorsze wyniki uzyskujemy dla funkcji cloglog.
+
+## Zadanie 6
+
+Dla modelu z funkcją linkującą "logit":  
+**>** Wyznaczę estymator macierzy kowariancji wektora estymatorów parametrów w modelu regresji logistycznej, następnie porównam wartości na przekątnej z estymatorami odchyleń standardowych zwracanych przez R.  
+Macierz kowariancji wygląda następująco:
+```{r, echo = FALSE}
+S <- diag(50)
+mu <- predict.glm(modellog, newdata = Dane, type = "response")
+S <- S * (mu * (1 - mu))
+X <- model.matrix(modellog)
+
+macierz_cov <- solve(t(X) %*% S %*% X)
+macierz_cov
+```
+Natomiast estymatory parametrów wynoszą:
+```{r, echo = FALSE}
+df <- data.frame(
+  Estymator_odchyl_stand = round(summary(modellog)$coefficients[,2],4),
+  Estymator_wariacji = round(summary(modellog)$coefficients[,2]^2,4)
+)
+
+knitr::kable(df)
+
+```
+Estymator wariancji ma takie same co do drugiej liczby po przecinku wartości, co wyrazy na przekątnej asymptotycznej macierzy kowariancji.  
+\newline
+**>** Przetestuję jedną hipotezę, że obie zmienne objaśniające nie mają wpływu na zmienną odpowiedzi. Zatem nasza hipoteza:
+$$H_0: \forall{i \in \{1,2\}} \ \beta_i = 0 \quad vs. \quad H_1: \exists{i \in \{1,2\}} \  \beta_i \neq 0$$
+Statystyka $\chi^2$ wynosi:
+```{r}
+round(summary(modellog)$null.deviance - summary(modellog)$deviance,3)
+```
+natomiast kwantyl rozkładu wynosi:
+```{r}
+qchisq(1-0.05, 2)
+```
+Statystyka jest większa, więc odrzucamy $H_0$ na poziomie istotności $\alpha = 0.05$. Oznacza to, że przynajmniej jeden regresor jest istotny.  
+\newline
+**>** Wykonam ponownie obliczenia stosując wartości epsilon ze zbioru $10^{-1}, 10^{-2}, 10^{-3}, 10^{-6}$. Porównam liczbę iteracji i wartości estymatorów poszczególnych parametrów.  
+
+Epsilon traktujemy jako wartość tolerancji, która określa granice błędów numerycznych akceptowanych w obliczeniach. Domyślna wartość epsilonu wynosi $10^{-8}$. Jest to wartość, poniżej której różnice między wartościami numerycznymi są uznawane za pomijalne, a dalsze zmniejszanie epsilonu może być zbędne lub prowadzić do błędów związanych z ograniczeniami maszynowymi.
+
+```{r, echo = FALSE}
+modellog5=glm(success~numeracy+anxiety,Dane,family="binomial", control = glm.control(epsilon = 0.1))$iter
+modellog6=glm(success~numeracy+anxiety,Dane,family="binomial", control = glm.control(epsilon = 1e-2))$iter
+modellog7=glm(success~numeracy+anxiety,Dane,family="binomial", control = glm.control(epsilon = 1e-3))$iter
+modellog8=glm(success~numeracy+anxiety,Dane,family="binomial", control = glm.control(epsilon = 1e-6))$iter
+
+tab = rbind(c("$10^{-1}$" ,"$10^{-2}$", "$10^{-3}$", "$10^{-6}$"), c(modellog5,modellog6,modellog7,modellog8))
+rownames(tab) = c("Epsilon", "Liczba iteracji")
+kable(tab)
+
+
+```
+
+Zatem im mniejsza jest wartość epsilon, tym więcej iteracji wykonujemy, co może prowadzić do dokładniejszego modelu. 
+
+
+# Symulacje
+
+## Zadanie 1 i 2
+Wygeneruję macierz $X$ wymiaru $n = 400, p = 3$ oraz $n = 100, p = 3$, której elementy są zmiennymi losowymi z rozkładu $N(0, \sigma^2 = 1/400)$. Założę, że binarny wektor odpowiedzi jest wygenerowany zgodnie z modelem regresji logistycznej z wektorem $\beta = (3,3,3)$. Wyznaczę macierz informacji Fishera w punkcie $\beta$ i asymptotyczną macierz kowariancji estymatorów największej wiarogosności. Wygeneruję 1000 replikacji wektora odpowiedzi zgodnie z powyższym modelem i na podstawie każdej replikacji wyznaczę estymator wektora $\beta$. 
+
+
+```{r}
+X = matrix(rnorm(1200,0,1/20),400,3)
+B = c(3,3,3)
+eta = X%*%B
+mu = c(plogis(eta)) #nakladam funkcje linkujaca 
+Y = rbinom(400,1,mu)
+model = glm(Y~X-1,family = "binomial")
+
+S = diag(400)
+S_diag = mu * (1-mu)
+S = S * S_diag
+fisher_matrix = t(X) %*% S %*% X
+fisher_matrix
+
+```
+Macierz asymptotycznej kowariancji jest postaci:
+```{r}
+solve(fisher_matrix)
+```
+  
+**>** Narysuję histogramy estymatorów $\hat\beta_1, \hat\beta_2, \hat\beta_3$ i porównam ich rozkładami asymptotycznymi.
+
+```{r, echo = FALSE, fig.height = 2.3, warning = FALSE}
+f1 <- function(n, p, rep) {
+  B <- c(3,3,3)  # Wartości współczynników B
+  B_values <- matrix(NA, nrow = rep, ncol = p)
+  
+  for (i in 1:rep) {
+    X <- matrix(rnorm(n * p, 0, 1/20), n, p)
+    eta <- X %*% B
+    mu <- plogis(eta)  # Funkcja linkująca
+    Y <- rbinom(n, 1, mu)
+    model <- glm(Y ~ X - 1, family = "binomial")
+    B_values[i, ] <- model$coefficients
+  }
+  
+  return(B_values)
+}
+
+# Generowanie danych
+vec_B1 <- f1(400, 3, 1000)
+
+# Konwertowanie do ramki danych
+df <- data.frame(B1 = vec_B1[, 1], B2 = vec_B1[, 2], B3 = vec_B1[, 3])
+
+# Histogramy za pomocą ggplot
+h1<- ggplot(df, aes(x = B1)) +
+  geom_histogram(binwidth = 0.5, fill = "skyblue", color = "black") +
+  stat_function(fun = function(x) dnorm(x, mean = mean(df$B1), sd = sd(df$B1)) * length(df$B1) * 0.5, color = "red", size = 1) +
+  labs(title = "Histogram b_1", x = "Wartość", y = "Częstość") +
+  theme_minimal()
+
+
+
+h2<- ggplot(df, aes(x = B2)) +
+  geom_histogram(binwidth = 0.5, fill = "skyblue", color = "black") +
+  stat_function(fun = function(x) dnorm(x, mean = mean(df$B2), sd = sd(df$B2)) * length(df$B2) * 0.5, color = "red", size = 1) +
+  labs(title = "Histogram b_2", x = "Wartość", y = "Częstość") +
+  theme_minimal()
+
+h3<- ggplot(df, aes(x = B3)) +
+  geom_histogram(binwidth = 0.5, fill = "skyblue", color = "black") +
+  stat_function(fun = function(x) dnorm(x, mean = mean(df$B3), sd = sd(df$B3)) * length(df$B3) * 0.5, color = "red", size = 1) +
+  labs(title = "Histogram b_3", x = "Wartość", y = "Częstość") +
+  theme_minimal()
+
+grid.arrange(h1, h2, h3, ncol = 3,top = "Rozkład estymatorów beta_i dla n = 400")
+
+```
+\newpage
+
+```{r, echo = FALSE, fig.height = 3}
+vec_B <- f1(100, 3, 1000)
+
+# Konwertowanie do ramki danych
+df <- data.frame(B1 = vec_B[, 1], B2 = vec_B[, 2], B3 = vec_B[, 3])
+
+# Histogramy za pomocą ggplot
+h1<- ggplot(df, aes(x = B1)) +
+  geom_histogram(binwidth = 0.8, fill = "skyblue", color = "black") +
+  stat_function(fun = function(x) dnorm(x, mean = mean(df$B1), sd = sd(df$B1)) * length(df$B1) * 0.8, color = "red", size = 1) +
+  labs(title = "Histogram b_1", x = "Wartość", y = "Częstość") +
+  theme_minimal()
+
+
+
+h2<- ggplot(df, aes(x = B2)) +
+  geom_histogram(binwidth = 0.8, fill = "skyblue", color = "black") +
+  stat_function(fun = function(x) dnorm(x, mean = mean(df$B2), sd = sd(df$B2)) * length(df$B2) * 0.8, color = "red", size = 1) +
+  labs(title = "Histogram b_2", x = "Wartość", y = "Częstość") +
+  theme_minimal()
+
+h3<- ggplot(df, aes(x = B3)) +
+  geom_histogram(binwidth = 0.8, fill = "skyblue", color = "black") +
+  stat_function(fun = function(x) dnorm(x, mean = mean(df$B3), sd = sd(df$B3)) * length(df$B3) * 0.8, color = "red", size = 1) +
+  labs(title = "Histogram b_3", x = "Wartość", y = "Częstość") +
+  theme_minimal()
+
+grid.arrange(h1, h2, h3, ncol = 3,top = "Rozkład estymatorów beta_i dla n = 100")
+
+```
+
+
+Dla $n = 400$ wszystkie trzy histogramy wyglądają podobnie, tak samo dla $n=  100$.  Czerwoną linią na wykresie zostały zaznaczone rozkłady asymptotyczne, widać, że wszystkie są histogramy są dość zbliżone do tego rozkładu. Można zauważyć, że histogramy dla $n=100$ są szersze, wynika to z większej wariancji estymatora.
+\newline
+**>** Wyestymuję obciążenie estymatorów $\hat\beta_1, \hat\beta_2$ i $\hat\beta_3$.
+
+```{r, echo = FALSE}
+bias1 <- round(c(mean(vec_B1[,1] - 3), mean(vec_B1[,2] - 3), mean(vec_B1[,3] - 3)),3)
+bias2 <- round(c(mean(vec_B[,1] - 3), mean(vec_B[,2] - 3), mean(vec_B[,3] - 3)),3)
+
+t_bias <- rbind(bias2, bias1)
+
+rownames(t_bias) <- c("n=100", "n=400")
+colnames(t_bias) <- c("$\\hat\\beta_1$", "$\\hat\\beta_2$", "$\\hat\\beta_3$")
+
+kable(t_bias)
+
+```
+Dla $n = 100$ mamy większe obciążenia.  
+**>** Wyestymuję macierz kowariancji wektora estymatorów $(\hat\beta_1, \hat\beta_2, \hat\beta_3)$ i porównam z asymptotyczną macierzą kowariancji.  
+Macierz kowariancji wektora estymatorów dla $n = 400$ jest postaci:
+```{r, echo = FALSE}
+
+
+
+vec2_B = f1(400,3,1000)
+cov(vec2_B)
+
+```
+Wyniki są zbliżone do macierzy asymptotycznej kowariancji. Minimalnie większe są różnice dla $n = 100$, ponieważ tam mamy większą wariancję estymowanych parametrów.
+
+## Zadanie 3 
+W zadaniu 3 powtórzę punkt 1 w przypadku, gdy wiersze macierzy $X$ są niezależnymi wektorami losowymi z wielowymiarowego rozkładu normalnego $N(0,\Sigma)$ z macierzą kowariancji $\Sigma  = \frac{1}{n}S$, gdzie $S_{ii} = 1$, a dla $i \neq j, \ S_{ij} = 0.3$. 
+```{r, echo = FALSE}
+#zad3
+rep = 1000
+
+B1 = c()
+B2 = c()
+B3 = c()
+set.seed(2)
+
+f2 <- function(n,p,rep){
+  for (i in 1:rep){
+   
+    S1 = matrix(0.3,n,n) + diag(n)*0.7
+    B <- c(3,3,3)
+    Sigma = S1/n
+    X = matrix(rnorm(n*p,0,Sigma),n,p)
+    eta = X%*%B
+    mu = 1 / (1 + exp(-eta))
+    Y = rbinom(n,1,mu)
+    model = glm(Y~X-1,family = "binomial")
+    B1[i] = model$coefficients[1]
+    B2[i] = model$coefficients[2]
+    B3[i] = model$coefficients[3]
+    
+  }
+  
+  return (cbind(B1,B2,B3))
+  
+}
+#?plogis
+
+vecK_B = f2(400,3,1000)
+S = diag(mu * (1-mu),400)
+fisher_matrix = t(X) %*% S %*% X
+
+#solve(fisher_matrix)
+
+
+
+B1k = vecK_B[,1]
+B2k = vecK_B[,2]
+B3k = vecK_B[,3]
+
+
+```
+Macierz Fishera jest postaci:
+```{r, echo = FALSE}
+fisher_matrix
+```
+Macierz asymptotycznej kowariancji jest postaci:
+```{r, echo = FALSE}
+solve(fisher_matrix)
+```
+
+
+```{r, echo = FALSE, fig.height = 3}
+df <- data.frame(B1 = vecK_B[, 1], B2 = vecK_B[, 2], B3 = vecK_B[, 3])
+
+# Histogramy za pomocą ggplot
+h1<- ggplot(df, aes(x = B1)) +
+  geom_histogram(binwidth = 20, fill = "skyblue", color = "black") +
+  stat_function(fun = function(x) dnorm(x, mean = mean(df$B1), sd = sd(df$B1)) * length(df$B1) * 20, color = "red", size = 1) +
+  labs(title = "Histogram b_1", x = "Wartość", y = "Częstość") +
+  theme_minimal()
+
+
+
+h2<- ggplot(df, aes(x = B2)) +
+  geom_histogram(binwidth = 20, fill = "skyblue", color = "black") +
+  stat_function(fun = function(x) dnorm(x, mean = mean(df$B2), sd = sd(df$B2)) * length(df$B2) * 20, color = "red", size = 1) +
+  labs(title = "Histogram b_2", x = "Wartość", y = "Częstość") +
+  theme_minimal()
+
+h3<- ggplot(df, aes(x = B3)) +
+  geom_histogram(binwidth = 20, fill = "skyblue", color = "black") +
+  stat_function(fun = function(x) dnorm(x, mean = mean(df$B3), sd = sd(df$B3)) * length(df$B3) * 20, color = "red", size = 1) +
+  labs(title = "Histogram b_3", x = "Wartość", y = "Częstość") +
+  theme_minimal()
+
+grid.arrange(h1, h2, h3, ncol = 3,top = "Rozkład estymatorów beta_i")
+
+
+
+
+```
+Obciążenie estymatorów:
+```{r, echo = FALSE}
+
+values <- round(c(mean(vecK_B[,1] - 3), mean(vecK_B[,2] - 3), mean(vecK_B[,3] - 3)), 3)
+tvalues <- t(values)
+colnames(tvalues) <- c("$\\hat{\\beta}_1$", "$\\hat{\\beta}_2$", "$\\hat{\\beta}_3$")
+
+
+kable(tvalues)
+
+```
+Macierz kowariancji wektora estymatorów jest postaci:
+```{r, echo = FALSE}
+cov(vecK_B)
+```
+
+Korelacja między regresorami prowadzi do wzrostu wariancji estymowanych parametrów, co można zaobserwować przy wzroście obciążenia. Można również zauważyć różnice w macierzy asymptotycznej kowariancji oraz estymowanej macierzy kowariancji. Histogram wygląda podobnie, jak w przypadku zadania 1 i 2, gdzie nyły niezależne regresory, jednak można zauważyć, że jest dużo bardziej rozciągniety, co wynika ze wzrostu wariancji. W tym zadaniu dobór korelacji był praktycznie zerowy. Zwiększenie korelacji mogłoby prowadzić do problemów z współliniowością danych.
+
+## Zadanie 4
+W tym zadaniu trzeba powtórzyć punkt 1 w przypadku, gdy wiersze macierzy $X$ są niezależne, a $p = 20$.  
+Analiza modelu wskazuje, że mamy około 10 istotnych współczynników, co stanowi połowę oczekiwanej liczby. Dla pierwszych 10 estymatorów wyniki są podobne do wyników z zadania 1, dla pozostałych wzrasta wariancja estymatorów oraz ich obciążenie. 
+
+
+# Wnioski
+
+
+***-*** Ze wszystkich histogramów mogliśmy odczytać, że estymatory oscylują wokół prawdziwej wartości - 3. W zadaniu 3. rozkład bet wyszedł o wiele szerszy (ich wariancja jest większa). Pokrywały się również wszystkie wyestymowane rozkłady $\beta_i$ wraz z ich asymptotycznymi rozkładami.  
+***-*** W zadaniu 3 i 4 wzrosło obciążenie estymatorów, co oznacza, że istnienie korelacjii między regresorami oraz liczba regresorów wpływają na ten parametr.   
+***-*** Wartości na przekątnych macierzy kowariancji estymatorów oraz asymptotycznej macierzy kowariancji były zbliżone, w zadaniu 3 różnica wartości była nieco większa, ale również same wartości były znacząco większe, niż w poprzednich zadaniach.
